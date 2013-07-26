@@ -50,7 +50,7 @@ public:
      *           \n本串口类析构时会自动关闭串口,无需额外执行关闭串口  
      *  @see:      
      */ 
-    bool InitPort( UINT  portNo = 1,UINT  baud = CBR_1200,char  parity = 'N',UINT  databits = 8, UINT  stopsbits = 1,DWORD dwCommEvents = EV_RXCHAR);  
+    bool InitPort( UINT  portNo = 1,UINT  baud = CBR_1200,char  parity = 'Y',UINT  databits = 8, UINT  stopsbits = 1,DWORD dwCommEvents = EV_RXCHAR);  
  
     /** 串口初始化函数  
      *  

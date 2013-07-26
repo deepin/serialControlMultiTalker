@@ -150,7 +150,7 @@ bool CSerialPort::InitPort( UINT portNo /*= 1*/,UINT baud /*= CBR_9600*/,char pa
         bIsSuccess = GetCommState(m_hComm, &dcb) && BuildCommDCB(pwText, &dcb) ;  
         /** 开启RTS flow控制 */   
         dcb.fRtsControl = RTS_CONTROL_ENABLE;   
- 
+
         /** 释放内存空间 */   
         delete [] pwText;  
     }  
@@ -485,14 +485,14 @@ unsigned int WINAPI McuComm(void *pParam)
 	unsigned char *beginwrite = reinterpret_cast<unsigned char *>("nextdata");
 
 	DWORD instanceflag = 0;
-
+	DCB  dcb;
 	ofstream temfile("temperatures.txt");
 	char tembuf[IN_BUF_SZ];
 	int nbytegot, counter = 0, i = 0;
 
 	//EscapeCommFunction(pSerialPort ->m_hComm, SETDTR);//外部触发信号初始化为高电平（负脉冲有效）
 
-	SetCommMask(pSerialPort ->m_hComm, EV_RXCHAR);
+	
     while (1)
     { 
 
@@ -502,10 +502,17 @@ unsigned int WINAPI McuComm(void *pParam)
 
 		temfile << ++counter << ": ";
 
+		 
+		
+		
+
 		for(i = 1; i <= NUMOFSLAVES; ++i){
 			itoa(i, (char*)addr, 10);
 			sendWithAck(pSerialPort, addr, strlen((const char *)addr));
 			//////switch to data mode, sending data frame, i.e. 9th bit is 0
+			GetCommState(pSerialPort ->m_hComm, &dcb);
+			dcb.Parity = PARITY_SPACE;
+			SetCommState(pSerialPort ->m_hComm, &dcb);
 
 			sendWithAck(pSerialPort, tem, strlen((char*)tem));//发送读取温度指令
 
@@ -518,7 +525,9 @@ unsigned int WINAPI McuComm(void *pParam)
 			temfile << tembuf << "; ";
 
 			//switch back to address mode
-			
+			GetCommState(pSerialPort ->m_hComm, &dcb);
+			dcb.Parity = PARITY_MARK;
+			SetCommState(pSerialPort ->m_hComm, &dcb);
 		}
 		temfile << "\n";
 
@@ -531,6 +540,10 @@ unsigned int WINAPI McuComm(void *pParam)
 				sendWithAck(pSerialPort, addr, strlen((const char *)addr));
 
 				///switch to data mode
+				GetCommState(pSerialPort ->m_hComm, &dcb);
+				dcb.Parity = PARITY_SPACE;
+				SetCommState(pSerialPort ->m_hComm, &dcb);
+
 				cout << "McuComm: \"beginwrite\" is sent" << endl;
 				pSerialPort ->WriteData(beginwrite, strlen((char*)beginwrite));			
 
@@ -542,6 +555,9 @@ unsigned int WINAPI McuComm(void *pParam)
 				cout << "McuComm: hearing that data has been written into #" << j << " mcu" << endl;
 
 				//switch back to address mode
+				GetCommState(pSerialPort ->m_hComm, &dcb);
+				dcb.Parity = PARITY_MARK;
+				SetCommState(pSerialPort ->m_hComm, &dcb);
 
 			}
 
