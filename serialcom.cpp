@@ -398,13 +398,15 @@ unsigned int WINAPI TemOven(void *pParam)
 		ReleaseSemaphore(hsemTemCome, 1, 0);		
 
 		--temcnt;
-		EnterCriticalSection(&crtc);
+		
 		if(temcnt == 0){
+			EnterCriticalSection(&crtc);
 			ExitFlag1 = 1;
 			cout << "\nTemOvenListen: i'm done!\n" << endl;
 			break;
+			LeaveCriticalSection(&crtc);
 		}
-		LeaveCriticalSection(&crtc);
+		
     }
 
 	return 0;
@@ -475,7 +477,7 @@ unsigned int WINAPI TemOven(void *pParam)
 	return 0;
  } 
  using std::ofstream;
-
+#define CMD_INTERVAL 1000
 unsigned int WINAPI McuComm(void *pParam)
  {
 
@@ -485,92 +487,65 @@ unsigned int WINAPI McuComm(void *pParam)
 	unsigned char *beginwrite = reinterpret_cast<unsigned char *>("nextdata");
 
 	DWORD instanceflag = 0;
-	DCB  dcb;
+
 	ofstream temfile("temperatures.txt");
 	char tembuf[IN_BUF_SZ];
 	int nbytegot, counter = 0, i = 0;
 
 	//EscapeCommFunction(pSerialPort ->m_hComm, SETDTR);//外部触发信号初始化为高电平（负脉冲有效）
 
-	
+	addr[0] = 'a';
     while (1)
     { 
-
-		WaitForSingleObject(hsemTemCome, INFINITE);
-
-		cout << "McuComm: tem come copied" << endl;
-
-		temfile << ++counter << ": ";
-
-		 
-		
-		
-
+		temfile << ++counter << ":\t";
 		for(i = 1; i <= NUMOFSLAVES; ++i){
-			itoa(i, (char*)addr, 10);
+
+			itoa(i, (char*)(addr + 1), 10);
 			sendWithAck(pSerialPort, addr, strlen((const char *)addr));
-			//////switch to data mode, sending data frame, i.e. 9th bit is 0
-			GetCommState(pSerialPort ->m_hComm, &dcb);
-			dcb.Parity = PARITY_SPACE;
-			SetCommState(pSerialPort ->m_hComm, &dcb);
+			//wait 1 second, for mcu to respond
+			Sleep(CMD_INTERVAL);
 
-			sendWithAck(pSerialPort, tem, strlen((char*)tem));//发送读取温度指令
-
-			
+			sendWithAck(pSerialPort, tem, strlen((char*)tem));//发送读取温度指令			
 			WaitCommEvent(pSerialPort ->m_hComm, &instanceflag, NULL);//read and store
 			Sleep(WAIT_AFTER_RXCHAR / 10);
-
 			receiveTem(pSerialPort, tembuf, nbytegot);//how does it receive in 9-bit mode; is there a problem?
 			
-			temfile << tembuf << "; ";
+			temfile << tembuf << "\t";
 
 			//switch back to address mode
-			GetCommState(pSerialPort ->m_hComm, &dcb);
-			dcb.Parity = PARITY_MARK;
-			SetCommState(pSerialPort ->m_hComm, &dcb);
+
 		}
 		temfile << "\n";
-
 
 
 		for(int i = 0; i < RoundPerTem; ++i){
 
 			for(int j = 1; j <= NUMOFSLAVES; ++j){
-				itoa(j, (char*)addr, 10);
+
+				itoa(j, (char*)(addr + 1), 10);
 				sendWithAck(pSerialPort, addr, strlen((const char *)addr));
 
-				///switch to data mode
-				GetCommState(pSerialPort ->m_hComm, &dcb);
-				dcb.Parity = PARITY_SPACE;
-				SetCommState(pSerialPort ->m_hComm, &dcb);
-
-				cout << "McuComm: \"beginwrite\" is sent" << endl;
-				pSerialPort ->WriteData(beginwrite, strlen((char*)beginwrite));			
-
-				WaitCommEvent(pSerialPort ->m_hComm, &instanceflag, NULL);//wait for data to be written
-
+				cout << "McuComm: \"" << (char*)beginwrite << "\" is sent" << endl;
+				pSerialPort ->WriteData(beginwrite, strlen((char*)beginwrite));		
+				//wait for data to be written
+				WaitCommEvent(pSerialPort ->m_hComm, &instanceflag, NULL);
 				Sleep(WAIT_AFTER_RXCHAR / 10);
-
-				receive(pSerialPort, tembuf, nbytegot);				//useless data must be cleared
-				cout << "McuComm: hearing that data has been written into #" << j << " mcu" << endl;
-
-				//switch back to address mode
-				GetCommState(pSerialPort ->m_hComm, &dcb);
-				dcb.Parity = PARITY_MARK;
-				SetCommState(pSerialPort ->m_hComm, &dcb);
+				//useless data must be received and ditch
+				receive(pSerialPort, tembuf, nbytegot);				
+				cout << "McuComm: seems data has been written into #" << j << " mcu" << endl;
 
 			}
 
-			cout << "McuComm: hearing that data has been written already" << endl;
-			cout << "MucComm: Cardinformer?it's your turn now! wait for good news" << endl;
-			ReleaseSemaphore(hsemDataReady, 1, 0);					//inform cardinformer thread to go
+			cout << "McuComm: hearing that data has been written into all mcus" << endl;
+			cout << "MucComm: Now, Cardinformer, it's your turn now!" << endl;				
 
 			if(ExitFlag1 && i == RoundPerTem - 1){
 				ExitFlag2 = 1;
 			}
+			//inform cardinformer thread to go
+			ReleaseSemaphore(hsemDataReady, 1, 0);	
 			WaitForSingleObject(hsemMeasDone, INFINITE);//which is able to give this signal? maybe have to use timer
 			cout << "MucComm: one round is done!" << endl;
-
 		}
 
 #ifdef _test
