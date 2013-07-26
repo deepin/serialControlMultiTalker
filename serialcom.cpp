@@ -482,13 +482,13 @@ unsigned int WINAPI McuComm(void *pParam)
     CSerialPort *pSerialPort = reinterpret_cast<CSerialPort*>(pParam);
 	unsigned char addr[10];
 	unsigned char *tem = reinterpret_cast<unsigned char *>("tem");
-	unsigned char *beginwrite = reinterpret_cast<unsigned char *>("beginwrite");
+	unsigned char *beginwrite = reinterpret_cast<unsigned char *>("nextdata");
 
 	DWORD instanceflag = 0;
 
 	ofstream temfile("temperatures.txt");
 	char tembuf[IN_BUF_SZ];
-	int nbytegot, counter = 0;
+	int nbytegot, counter = 0, i = 0;
 
 	//EscapeCommFunction(pSerialPort ->m_hComm, SETDTR);//外部触发信号初始化为高电平（负脉冲有效）
 
@@ -500,44 +500,63 @@ unsigned int WINAPI McuComm(void *pParam)
 
 		cout << "McuComm: tem come copied" << endl;
 
-		/*for(int i = 1; i <= NUMOFSLAVES; ++i){
-			itoa(i, (char*)addr, 10);
-			while(!sendWithAck(pSerialPort, addr, 4));
-			//switch to 8-bit mode
-			sendWithAck(pSerialPort, tem, 4);//发送读取温度指令
-
-		}*/
-		sendWithAck(pSerialPort, tem, strlen((char*)tem));
-		WaitCommEvent(pSerialPort ->m_hComm, &instanceflag, NULL);//read and store
-
-		Sleep(WAIT_AFTER_RXCHAR / 10);
-
-		receiveTem(pSerialPort, tembuf, nbytegot);
 		temfile << ++counter << ": ";
-		temfile << tembuf;
+
+		for(i = 1; i <= NUMOFSLAVES; ++i){
+			itoa(i, (char*)addr, 10);
+			sendWithAck(pSerialPort, addr, strlen((const char *)addr));
+			//////switch to data mode, sending data frame, i.e. 9th bit is 0
+
+			sendWithAck(pSerialPort, tem, strlen((char*)tem));//发送读取温度指令
+
+			
+			WaitCommEvent(pSerialPort ->m_hComm, &instanceflag, NULL);//read and store
+			Sleep(WAIT_AFTER_RXCHAR / 10);
+
+			receiveTem(pSerialPort, tembuf, nbytegot);//how does it receive in 9-bit mode; is there a problem?
+			
+			temfile << tembuf << "; ";
+
+			//switch back to address mode
+			
+		}
 		temfile << "\n";
+
+
 
 		for(int i = 0; i < RoundPerTem; ++i){
 
-			cout << "McuComm: \"beginwrite\" is sent" << endl;
-			pSerialPort ->WriteData(beginwrite, strlen((char*)beginwrite));			
-			
-			WaitCommEvent(pSerialPort ->m_hComm, &instanceflag, NULL);//wait for data to be written
-			
-			Sleep(WAIT_AFTER_RXCHAR / 10);
+			for(int j = 1; j <= NUMOFSLAVES; ++j){
+				itoa(j, (char*)addr, 10);
+				sendWithAck(pSerialPort, addr, strlen((const char *)addr));
 
-			receive(pSerialPort, tembuf, nbytegot);				//useless data must be cleared
+				///switch to data mode
+				cout << "McuComm: \"beginwrite\" is sent" << endl;
+				pSerialPort ->WriteData(beginwrite, strlen((char*)beginwrite));			
+
+				WaitCommEvent(pSerialPort ->m_hComm, &instanceflag, NULL);//wait for data to be written
+
+				Sleep(WAIT_AFTER_RXCHAR / 10);
+
+				receive(pSerialPort, tembuf, nbytegot);				//useless data must be cleared
+				cout << "McuComm: hearing that data has been written into #" << j << " mcu" << endl;
+
+				//switch back to address mode
+
+			}
+
 			cout << "McuComm: hearing that data has been written already" << endl;
-
 			cout << "MucComm: Cardinformer?it's your turn now! wait for good news" << endl;
 			ReleaseSemaphore(hsemDataReady, 1, 0);					//inform cardinformer thread to go
-			
+
 			if(ExitFlag1 && i == RoundPerTem - 1){
 				ExitFlag2 = 1;
 			}
-			WaitForSingleObject(hsemMeasDone, INFINITE);
+			WaitForSingleObject(hsemMeasDone, INFINITE);//which is able to give this signal? maybe have to use timer
 			cout << "MucComm: one round is done!" << endl;
+
 		}
+
 #ifdef _test
 		ReleaseSemaphore(hsemNewTem, 1, 0);
 #endif
@@ -545,7 +564,6 @@ unsigned int WINAPI McuComm(void *pParam)
 			cout << "\nMcuComm: i'm done!\n" << endl;
 			break;
 		}
-
 
     }  
 	temfile.close();
