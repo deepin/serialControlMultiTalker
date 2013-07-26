@@ -149,5 +149,6 @@ int _tmain(int argc, _TCHAR* argv[])
 	CloseHandle(hsemMeasDone);
 	CloseHandle(hsemNewTem);
 	system("notify.wav");
+	system("temperatures.txt");
     return 0;  
 } 

@@ -88,10 +88,10 @@ public:
 	friend unsigned int WINAPI Card(void *pParam);
 	friend unsigned int WINAPI TemOven(void *pParam);
 
-	friend bool receiveTem(CSerialPort *pSerialPort, char *rcv, int &nActual, int nDsire = IN_BUF_SZ, bool hashead = false);
-	friend bool receive(CSerialPort *pSerialPort, char *rcv, int &nActual, int nDsire = IN_BUF_SZ, bool hashead = false);
-	friend bool sendWithAck(CSerialPort *pSerialPort, unsigned char *tosend, const int n, char postfix = 'z');
-	friend bool send(CSerialPort *pSerialPort, unsigned char *tosend, const int n, char postfix = 'z');
+	friend bool receiveTem(CSerialPort *pSerialPort, char *rcv, int &nActual);
+	friend bool receive(CSerialPort *pSerialPort, char *rcv, int &nActual);
+	friend bool sendWithAck(CSerialPort *pSerialPort, unsigned char *tosend, const int n);
+	friend bool send(CSerialPort *pSerialPort, unsigned char *tosend, const int n);
 
 
 
@@ -189,8 +189,8 @@ private:
 	unsigned int WINAPI Card(void *pParam);
 	unsigned int WINAPI TemOven(void *pParam);
 
-	bool receiveTem(CSerialPort *pSerialPort, char *rcv, int &nActual, int nDsire, bool hashead);
-	bool receive(CSerialPort *pSerialPort, char *rcv, int &nActual, int nDsire, bool hashead);
-	bool sendWithAck(CSerialPort *pSerialPort, unsigned char *tosend, const int n, char postfix);
-	bool send(CSerialPort *pSerialPort, unsigned char *tosend, const int n, char postfix);
+	bool receiveTem(CSerialPort *pSerialPort, char *rcv, int &nActual);
+	bool receive(CSerialPort *pSerialPort, char *rcv, int &nActual);
+	bool sendWithAck(CSerialPort *pSerialPort, unsigned char *tosend, const int n);
+	bool send(CSerialPort *pSerialPort, unsigned char *tosend, const int n);
 #endif //SERIALPORT_H_

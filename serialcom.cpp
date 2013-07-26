@@ -29,7 +29,8 @@ bool CSerialPort::s_bExit = false;
 const UINT SLEEP_TIME_INTERVAL = 5; 
 
  HANDLE hsemTemCome, hsemDataReady, hsemMeasDone, hsemNewTem;
- const unsigned int TemCnt = 30, RoundPerTem = 40;
+ const unsigned char NUMOFSLAVES = 2;
+ const unsigned int TemCnt = 3, RoundPerTem = 2;
  unsigned int ExitFlag1 = 0, ExitFlag2 = 0;
 
  CRITICAL_SECTION crtc;
@@ -412,6 +413,7 @@ unsigned int WINAPI TemOven(void *pParam)
  unsigned int WINAPI Card(void *pParam)
  {
 	 //Sleep(WAIT_TILL_ALL_READY);
+
 	 CSerialPort *hcomm = reinterpret_cast<CSerialPort *>(pParam);
 	 DWORD tmp, oldmask;
 	 int  cnt = TemCnt * RoundPerTem;
@@ -477,9 +479,10 @@ unsigned int WINAPI TemOven(void *pParam)
 unsigned int WINAPI McuComm(void *pParam)
  {
 
-    CSerialPort *pSerialPort = reinterpret_cast<CSerialPort*>(pParam);  
-	unsigned char *tem = reinterpret_cast<unsigned char *>("temz");
-	unsigned char *beginwrite = reinterpret_cast<unsigned char *>("beginwritez");
+    CSerialPort *pSerialPort = reinterpret_cast<CSerialPort*>(pParam);
+	unsigned char addr[10];
+	unsigned char *tem = reinterpret_cast<unsigned char *>("tem");
+	unsigned char *beginwrite = reinterpret_cast<unsigned char *>("beginwrite");
 
 	DWORD instanceflag = 0;
 
@@ -497,8 +500,14 @@ unsigned int WINAPI McuComm(void *pParam)
 
 		cout << "McuComm: tem come copied" << endl;
 
-		sendWithAck(pSerialPort, tem, 4);//发送读取温度指令
+		/*for(int i = 1; i <= NUMOFSLAVES; ++i){
+			itoa(i, (char*)addr, 10);
+			while(!sendWithAck(pSerialPort, addr, 4));
+			//switch to 8-bit mode
+			sendWithAck(pSerialPort, tem, 4);//发送读取温度指令
 
+		}*/
+		sendWithAck(pSerialPort, tem, strlen((char*)tem));
 		WaitCommEvent(pSerialPort ->m_hComm, &instanceflag, NULL);//read and store
 
 		Sleep(WAIT_AFTER_RXCHAR / 10);
@@ -510,8 +519,8 @@ unsigned int WINAPI McuComm(void *pParam)
 
 		for(int i = 0; i < RoundPerTem; ++i){
 
-			cout << "McuComm: \"beginwritez\" is sent" << endl;
-			pSerialPort ->WriteData(beginwrite, 11);			
+			cout << "McuComm: \"beginwrite\" is sent" << endl;
+			pSerialPort ->WriteData(beginwrite, strlen((char*)beginwrite));			
 			
 			WaitCommEvent(pSerialPort ->m_hComm, &instanceflag, NULL);//wait for data to be written
 			
@@ -574,10 +583,9 @@ unsigned int WINAPI McuComm(void *pParam)
 		randomTem[0] = char(x / 100 + '0');
 		randomTem[1] = char((x / 10) % 10 + '0');
 		randomTem[2] = char(x % 10 + '0');
-		randomTem[3] = 'z';
-		randomTem[4] = '\0';
+		randomTem[3] = '\0';
 		cout << "Mcu: sending tem data done!" << endl;
-		sendWithAck(hcomm,(unsigned char *) randomTem, 4);
+		sendWithAck(hcomm,(unsigned char *) randomTem, strlen(randomTem));
 		
 		//cnt次数据写入
 		while(cnt){
@@ -597,7 +605,7 @@ unsigned int WINAPI McuComm(void *pParam)
 		
 			cout << "Mcu: writing data to asic done!" << endl;
 
-			sendWithAck(hcomm,(unsigned char *) "datawrittenz", 12);
+			sendWithAck(hcomm,(unsigned char *) "datawritten", strlen("datawritten"));
 			--cnt;
 			if(!cnt)
 				break;			
@@ -614,15 +622,13 @@ unsigned int WINAPI McuComm(void *pParam)
   
  
 //bool receiveTem(char *rcv, int nDesire, int &nActual, bool hashead = false);
-bool receiveTem(CSerialPort *pSerialPort, char *rcv, int &nActual, int nDsire, bool hashead)
+bool receiveTem(CSerialPort *pSerialPort, char *rcv, int &numWritten)
 {  
-	char byte;
+	char byt;
 	int i;
 	bool lp = true;
-	if(hashead){
-		//
-	}
-	nActual = 0;
+
+	numWritten = 0;
 
     while (lp){  
 		UINT BytesInQue = pSerialPort->GetBytesInCOM(); 
@@ -632,59 +638,53 @@ bool receiveTem(CSerialPort *pSerialPort, char *rcv, int &nActual, int nDsire, b
 		}
 
 		for(i = 0; i < BytesInQue; ++i){
-			pSerialPort->ReadChar(byte);
-			if(byte == 'z'){
-				rcv[nActual] = '\0';
-				lp = false;
-				break;
-			}
-			if(byte < '0' || byte > '9'){
+			pSerialPort->ReadChar(byt);
+			if(byt < '0' || byt > '9'){
 				cout << "receiveTem: each byte supposed to be 0 ~ 9, and is not" << endl;
 				return false;
 			}
-			rcv[nActual++] = byte;
+			rcv[numWritten++] = byt;
 		}
+		rcv[numWritten] = '\0';
+		break;
 		 
     }  
 	cout << "\"" << rcv << "\"" << "received!" << endl;
     return true;  
 }
-bool send(CSerialPort *pSerialPort, unsigned char *tosend, const int n, char postfix)
+bool send(CSerialPort *pSerialPort, unsigned char *tosend, const int n)
 {
-	DWORD evtmasksave, temp;
+	//DWORD evtmasksave, temp;
 	//GetCommMask(pSerialPort ->m_hComm, &evtmasksave);//备份mask
 	//SetCommMask(pSerialPort ->m_hComm, EV_RXCHAR);
 
-	EnterCriticalSection(&pSerialPort ->m_csCommunicationSync);
+	//EnterCriticalSection(&pSerialPort ->m_csCommunicationSync);
 	pSerialPort ->WriteData(tosend, n);//发送
-	LeaveCriticalSection(&pSerialPort ->m_csCommunicationSync);
+	//LeaveCriticalSection(&pSerialPort ->m_csCommunicationSync);
 
 	return true;
 	
 }
-bool sendWithAck(CSerialPort *pSerialPort, unsigned char *tosend, const int n, char postfix)
+bool sendWithAck(CSerialPort *pSerialPort, unsigned char *tosend, const int n)
 {
-	DWORD evtmasksave, temp;
-	GetCommMask(pSerialPort ->m_hComm, &evtmasksave);//备份mask
-	SetCommMask(pSerialPort ->m_hComm, EV_RXCHAR);
+	//DWORD evtmasksave, temp;
+	//GetCommMask(pSerialPort ->m_hComm, &evtmasksave);//备份mask
+	//SetCommMask(pSerialPort ->m_hComm, EV_RXCHAR);
 
 	pSerialPort ->WriteData(tosend, n);//发送
 
 	cout << "\"" << tosend << "\"" << " is sent" << endl;
 
-	SetCommMask(pSerialPort ->m_hComm, evtmasksave);//还原mask
+	//SetCommMask(pSerialPort ->m_hComm, evtmasksave);//还原mask
 	return true;
 	
 }
-bool receive(CSerialPort *pSerialPort, char *rcv, int &nActual, int nDsire, bool hashead)
+bool receive(CSerialPort *pSerialPort, char *rcv, int &numWritten)
 {  
 	char byte;
 	int i;
-	if(hashead){
-		//
-	}
+	numWritten = 0;
 
-	nActual = 0;
     while (true){
 		UINT BytesInQue = pSerialPort->GetBytesInCOM(); 
 		if(BytesInQue == 0){
@@ -694,150 +694,12 @@ bool receive(CSerialPort *pSerialPort, char *rcv, int &nActual, int nDsire, bool
 
 		for(i = 0; i < BytesInQue; ++i){
 			pSerialPort->ReadChar(byte);
-			if(byte == 'z'){
-				rcv[nActual] = '\0';
-				cout << "\"" << rcv << "\"" << "received!" << endl;
-				return true;
-			}
-
-			rcv[nActual++] = byte;
+			rcv[numWritten++] = byte;
 		}
+		rcv[numWritten] = '\0';
+		break;
 		 
     }  
 	cout << "\"" << rcv << "\"" << "received!" << endl;
     return true;  
 }
- 
-
- /*
-  //bool receiveTem(char *rcv, int nDesire, int &nActual, bool hashead = false);
-bool receiveTem(CSerialPort *pSerialPort, char *rcv, int &nActual, int nDsire, bool hashead)
-{  
-	char byte;
-	int i;
-	bool lp = true;
-	if(hashead){
-		//
-	}
-	nActual = 0;
-
-    while (lp){  
-		UINT BytesInQue = pSerialPort->GetBytesInCOM(); 
-		if(BytesInQue == 0){
-			Sleep(100);
-			continue;
-		}
-
-		for(i = 0; i < BytesInQue; ++i){
-			pSerialPort->ReadChar(byte);
-			if(byte == 'z'){
-				rcv[nActual] = '\0';
-				lp = false;
-				break;
-			}
-			if(byte < '0' || byte > '9'){
-				EnterCriticalSection(&crtcCout); 
-				cout << "receiveTem: each byte supposed to be 0 ~ 9, and is not" << endl;
-				LeaveCriticalSection(&crtcCout);
-
-				return false;
-			}
-			rcv[nActual++] = byte;
-		}
-		 
-    }  
-
-    return true;  
-}
-bool send(CSerialPort *pSerialPort, unsigned char *tosend, const int n, char postfix)
-{
-	DWORD evtmasksave, temp;
-	//GetCommMask(pSerialPort ->m_hComm, &evtmasksave);//备份mask
-	//SetCommMask(pSerialPort ->m_hComm, EV_RXCHAR);
-
-	EnterCriticalSection(&pSerialPort ->m_csCommunicationSync);
-	pSerialPort ->WriteData(tosend, n);//发送
-	LeaveCriticalSection(&pSerialPort ->m_csCommunicationSync);
-
-	return true;
-	
-}
-bool sendWithAck(CSerialPort *pSerialPort, unsigned char *tosend, const int n, char postfix)
-{
-	DWORD evtmasksave, temp;
-	GetCommMask(pSerialPort ->m_hComm, &evtmasksave);//备份mask
-	SetCommMask(pSerialPort ->m_hComm, EV_RXCHAR);
-
-	EnterCriticalSection(&pSerialPort ->m_csCommunicationSync);
-	pSerialPort ->WriteData(tosend, n);//发送
-
-	EnterCriticalSection(&crtcCout); 
-	cout << "\"" << tosend << "\"" << " is sent" << endl;
-	LeaveCriticalSection(&crtcCout);
-
-	LeaveCriticalSection(&pSerialPort ->m_csCommunicationSync);
-
-
-
-	WaitCommEvent(pSerialPort ->m_hComm, &temp, 0);//等待ack
-
-	EnterCriticalSection(&crtcCout); 
-	cout << "sendWithAck: ack seems to arrive" << endl;
-	LeaveCriticalSection(&crtcCout);
-
-	char buf[IN_BUF_SZ];
-	int cnt;
-	char ack[IN_BUF_SZ];
-
-	
-	
-	strcpy(ack, "ack");
-	strcat(ack, (char *)tosend);
-
-	receive(pSerialPort, buf, cnt);
-
-	if(strcmp(buf, ack)){//检查是否有正确的ack
-
-		EnterCriticalSection(&crtcCout); 
-		cout << "sendWithAck: ack not right" << endl;
-		LeaveCriticalSection(&crtcCout);
-
-		SetCommMask(pSerialPort ->m_hComm, evtmasksave);
-		return false;
-	}
-
-	SetCommMask(pSerialPort ->m_hComm, evtmasksave);//还原mask
-	return true;
-	
-}
-bool receive(CSerialPort *pSerialPort, char *rcv, int &nActual, int nDsire, bool hashead)
-{  
-	char byte;
-	int i;
-	if(hashead){
-		//
-	}
-
-	nActual = 0;
-    while (true){
-		UINT BytesInQue = pSerialPort->GetBytesInCOM(); 
-		if(BytesInQue == 0){
-			Sleep(100);
-			continue;
-		}
-
-		for(i = 0; i < BytesInQue; ++i){
-			pSerialPort->ReadChar(byte);
-			if(byte == 'z'){
-				rcv[nActual] = '\0';
-				return true;
-			}
-
-			rcv[nActual++] = byte;
-		}
-		 
-    }  
- 
-    return true;  
-}
-  */
