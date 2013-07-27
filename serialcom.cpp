@@ -29,7 +29,7 @@ bool CSerialPort::s_bExit = false;
 const UINT SLEEP_TIME_INTERVAL = 5; 
 
  HANDLE hsemTemCome, hsemDataReady, hsemMeasDone, hsemNewTem;
- const unsigned char NUMOFSLAVES = 2;
+ const unsigned char NUMOFSLAVES = 1;
  const unsigned int TemCnt = 3, RoundPerTem = 2;
  unsigned int ExitFlag1 = 0, ExitFlag2 = 0;
 
@@ -497,13 +497,17 @@ unsigned int WINAPI McuComm(void *pParam)
 	addr[0] = 'a';
     while (1)
     { 
+		WaitForSingleObject(hsemTemCome, INFINITE);
+		cout << "McuComm: tem come copied" << endl;
+
+
 		temfile << ++counter << ":\t";
 		for(i = 1; i <= NUMOFSLAVES; ++i){
 
 			itoa(i, (char*)(addr + 1), 10);
 			sendWithAck(pSerialPort, addr, strlen((const char *)addr));
-			//wait 1 second, for mcu to respond
-			Sleep(CMD_INTERVAL);
+			WaitCommEvent(pSerialPort ->m_hComm, &instanceflag, NULL);
+			receive(pSerialPort, tembuf, nbytegot);
 
 			sendWithAck(pSerialPort, tem, strlen((char*)tem));//发送读取温度指令			
 			WaitCommEvent(pSerialPort ->m_hComm, &instanceflag, NULL);//read and store
@@ -524,6 +528,8 @@ unsigned int WINAPI McuComm(void *pParam)
 
 				itoa(j, (char*)(addr + 1), 10);
 				sendWithAck(pSerialPort, addr, strlen((const char *)addr));
+				WaitCommEvent(pSerialPort ->m_hComm, &instanceflag, NULL);
+				receive(pSerialPort, tembuf, nbytegot);
 
 				cout << "McuComm: \"" << (char*)beginwrite << "\" is sent" << endl;
 				pSerialPort ->WriteData(beginwrite, strlen((char*)beginwrite));		
@@ -573,17 +579,24 @@ unsigned int WINAPI McuComm(void *pParam)
 	 bool ext = false;
 	 char ack[IN_BUF_SZ];
 	 char randomTem[10];
+#define SELFADDR 1
 	 
 	 srand(time((unsigned)0));
 	 SetCommMask(hcomm ->m_hComm, EV_RXCHAR);
 	 while(1){
 		cnt = RoundPerTem;
 		
-		//等待温度数据请求指令“temz”
-
 		WaitCommEvent(hcomm ->m_hComm, &temp, 0);
 		Sleep(WAIT_AFTER_RXCHAR / 10);
+		receive(hcomm, buf, nrcvd);
+		if(SELFADDR != atoi((const char*)(buf + 1))){
+			continue;
+		}
+		sendWithAck(hcomm,(unsigned char*)"address verified!", strlen("address verified!"));
 
+		//等待温度数据请求指令“tem”
+		WaitCommEvent(hcomm ->m_hComm, &temp, 0);
+		Sleep(WAIT_AFTER_RXCHAR / 10);
 		receive(hcomm, buf, nrcvd);
 		cout << "Mcu: tem cmd copied!" << endl;
 
@@ -598,26 +611,30 @@ unsigned int WINAPI McuComm(void *pParam)
 		
 		//cnt次数据写入
 		while(cnt){
-			//等待数据写入指令
-
 			WaitCommEvent(hcomm ->m_hComm, &temp, 0);
 			Sleep(WAIT_AFTER_RXCHAR / 10);
-
 			receive(hcomm, buf, nrcvd);
+			if(SELFADDR != atoi((const char*)(buf + 1))){
+				continue;
+			}
+			sendWithAck(hcomm,(unsigned char*)"address verified!", strlen("address verified!"));
 
+			//等待数据写入指令
+			WaitCommEvent(hcomm ->m_hComm, &temp, 0);
+			Sleep(WAIT_AFTER_RXCHAR / 10);
+			receive(hcomm, buf, nrcvd);
 			cout << "Mcu: data writing cmd copied!" << endl;
-
 	
 			//模拟写入数据
-			cout << "Mcu: sleeping for " << DATA_WRITING_TIME / 1000 << " seconds" << endl;
-			Sleep(DATA_WRITING_TIME);
-		
+			Sleep(DATA_WRITING_TIME);		
 			cout << "Mcu: writing data to asic done!" << endl;
 
+			//written done notification
 			sendWithAck(hcomm,(unsigned char *) "datawritten", strlen("datawritten"));
+
 			--cnt;
-			if(!cnt)
-				break;			
+			//if(!cnt)
+				//break;			
 		}
 
 		--temcnt;
