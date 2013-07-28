@@ -23,6 +23,12 @@
 #include <iostream>  
 #include <fstream>
 #include <string.h>
+/*
+#ifdef _simulation
+#endif*/
+
+
+
 /** 线程退出标志 */   
 bool CSerialPort::s_bExit = false;  
 /** 当串口无数据时,sleep至下次查询间隔的时间,单位:秒 */   
@@ -554,7 +560,7 @@ unsigned int WINAPI McuComm(void *pParam)
 			cout << "MucComm: one round is done!" << endl;
 		}
 
-#ifdef _test
+#ifdef _simulation
 		ReleaseSemaphore(hsemNewTem, 1, 0);
 #endif
 		if(ExitFlag1 == 1){

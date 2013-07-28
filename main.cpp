@@ -141,6 +141,7 @@ int _tmain(int argc, _TCHAR* argv[])
         std::cout << "Open Card Thread success !" << std::endl;  
     }
 
+
 	//等待线程结束,然后结束整个程序
 	WaitForMultipleObjects(6, thtable, true, INFINITE);
 
